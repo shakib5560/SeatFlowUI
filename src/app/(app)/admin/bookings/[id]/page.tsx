@@ -3,7 +3,7 @@
 import { use, useState, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import { useBooking, useApproveBooking, useRejectBooking } from '@/hooks/useAdminBookings';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -32,7 +32,6 @@ function AdminBookingDetailContent({
 
   // Mutations
   const approveMutation = useApproveBooking();
-  const rejectMutation = useApproveBooking(); // Wait, let's use useRejectBooking() hook which we defined in useAdminBookings.ts!
   const rejectMutationHook = useRejectBooking();
 
   const handleApprove = async () => {
@@ -78,19 +77,21 @@ function AdminBookingDetailContent({
   };
 
   if (isLoading) {
-    return <div className="py-12 text-center text-slate-500 flex items-center justify-center gap-2">
-      <RefreshCw className="h-4 w-4 animate-spin text-indigo-600" /> Loading booking detail...
-    </div>;
+    return (
+      <div className="py-12 text-center text-[#A1A1AA] flex items-center justify-center gap-2">
+        <RefreshCw className="h-4 w-4 animate-spin text-[#7C3AED]" /> Loading booking detail...
+      </div>
+    );
   }
 
   if (isError || !booking) {
     return (
-      <div className="py-12 text-center text-slate-500">
-        <AlertCircle className="mx-auto h-12 w-12 text-rose-500" />
-        <h2 className="mt-4 text-xl font-bold text-slate-900">Booking Record Not Found</h2>
-        <p className="mt-2 text-slate-500">{(error as Error)?.message || 'Record does not exist.'}</p>
+      <div className="py-12 text-center text-[#A1A1AA]">
+        <AlertCircle className="mx-auto h-12 w-12 text-rose-400" />
+        <h2 className="mt-4 text-xl font-bold text-[#FAFAFA]">Booking Record Not Found</h2>
+        <p className="mt-2 text-[#A1A1AA]">{(error as Error)?.message || 'Record does not exist.'}</p>
         <Link href="/admin" className="mt-6 inline-block">
-          <Button variant="outline" className="flex items-center gap-2">
+          <Button variant="outline" className="flex items-center gap-2 border-white/[0.08] text-[#FAFAFA] bg-[#111113] hover:bg-[#18181B]">
             <ArrowLeft className="h-4 w-4" /> Back to Dashboard
           </Button>
         </Link>
@@ -102,34 +103,34 @@ function AdminBookingDetailContent({
   const isPendingOrMutationLoading = approveMutation.isPending || rejectMutationHook.isPending;
 
   return (
-    <div className="space-y-6 py-4 max-w-4xl mx-auto">
+    <div className="space-y-6 py-6 max-w-4xl mx-auto text-[#FAFAFA]">
       {/* Back button */}
       <div>
-        <Link href="/admin" className="inline-flex items-center text-sm font-semibold text-indigo-600 hover:text-indigo-500 gap-1">
+        <Link href="/admin" className="inline-flex items-center text-sm font-semibold text-[#7C3AED] hover:text-[#8B5CF6] gap-1 transition-colors">
           <ArrowLeft className="h-4 w-4" /> Back to Admin Panel
         </Link>
       </div>
 
       {/* Detail card */}
-      <Card className="border-slate-200 shadow-sm bg-white overflow-hidden">
+      <Card className="border-white/[0.08] shadow-md bg-[#111113] text-[#FAFAFA] overflow-hidden">
         {/* Card Header with Status Badge */}
-        <CardHeader className="bg-slate-50 border-b border-slate-200">
+        <CardHeader className="bg-[#18181B] border-b border-white/[0.08]">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <div className="flex items-center gap-2 text-xs text-slate-500 font-mono">
-                <Shield className="h-3.5 w-3.5" /> ID: {booking.bookingId}
+              <div className="flex items-center gap-2 text-xs text-[#A1A1AA] font-mono">
+                <Shield className="h-3.5 w-3.5 text-[#7C3AED]" /> ID: {booking.bookingId}
               </div>
-              <CardTitle className="text-xl font-extrabold text-slate-950 mt-1">
+              <CardTitle className="text-xl font-extrabold text-[#FAFAFA] mt-1">
                 Booking: <span className="font-mono">{booking.bookingReference}</span>
               </CardTitle>
             </div>
             <Badge
               className={`text-xs py-1 px-3 border ${
                 booking.status === 'CONFIRMED'
-                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-50'
+                  ? 'bg-emerald-500/10 text-[#22C55E] border-emerald-500/20 hover:bg-emerald-500/10'
                   : booking.status === 'FAILED'
-                  ? 'bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-50'
-                  : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-50'
+                  ? 'bg-rose-500/10 text-rose-400 border-rose-500/20 hover:bg-rose-500/10'
+                  : 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/10'
               }`}
             >
               {booking.status}
@@ -140,8 +141,8 @@ function AdminBookingDetailContent({
         <CardContent className="pt-6 space-y-6">
           {/* Action error banner */}
           {actionError && (
-            <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-950 flex items-start gap-2">
-              <AlertCircle className="h-5 w-5 text-rose-500 shrink-0 mt-0.5" />
+            <div className="rounded-lg border border-rose-500/20 bg-rose-500/5 p-4 text-sm text-rose-400 flex items-start gap-2">
+              <AlertCircle className="h-5 w-5 text-rose-400 shrink-0 mt-0.5" />
               <div>
                 <span className="font-bold">Transaction Failed:</span> {actionError}
               </div>
@@ -152,22 +153,22 @@ function AdminBookingDetailContent({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Column 1: Customer Details */}
             <div className="space-y-4">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 pb-2">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-[#A1A1AA] border-b border-white/[0.08] pb-2">
                 Customer Information
               </h3>
               <div className="space-y-3">
                 <div className="flex items-start gap-2.5">
-                  <User className="h-4 w-4 text-slate-400 mt-0.5" />
+                  <User className="h-4 w-4 text-white/[0.3] mt-0.5" />
                   <div>
-                    <p className="text-xs text-slate-500">Full Name</p>
-                    <p className="text-sm font-semibold text-slate-900">{booking.customerName}</p>
+                    <p className="text-xs text-[#A1A1AA]">Full Name</p>
+                    <p className="text-sm font-semibold text-[#FAFAFA]">{booking.customerName}</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-2.5">
-                  <Mail className="h-4 w-4 text-slate-400 mt-0.5" />
+                  <Mail className="h-4 w-4 text-white/[0.3] mt-0.5" />
                   <div>
-                    <p className="text-xs text-slate-500">Email Address</p>
-                    <p className="text-sm font-semibold text-slate-900">{booking.customerEmail}</p>
+                    <p className="text-xs text-[#A1A1AA]">Email Address</p>
+                    <p className="text-sm font-semibold text-[#FAFAFA]">{booking.customerEmail}</p>
                   </div>
                 </div>
               </div>
@@ -175,32 +176,32 @@ function AdminBookingDetailContent({
 
             {/* Column 2: Booking Details */}
             <div className="space-y-4">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 pb-2">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-[#A1A1AA] border-b border-white/[0.08] pb-2">
                 Scheduling Details
               </h3>
               <div className="space-y-3">
                 <div className="flex items-start gap-2.5">
-                  <Home className="h-4 w-4 text-slate-400 mt-0.5" />
+                  <Home className="h-4 w-4 text-white/[0.3] mt-0.5" />
                   <div>
-                    <p className="text-xs text-slate-500">Conference Room</p>
-                    <p className="text-sm font-semibold text-indigo-600">{booking.room?.name || 'Unknown'}</p>
+                    <p className="text-xs text-[#A1A1AA]">Conference Room</p>
+                    <p className="text-sm font-semibold text-[#8B5CF6]">{booking.room?.name || 'Unknown'}</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-2.5">
-                  <Calendar className="h-4 w-4 text-slate-400 mt-0.5" />
+                  <Calendar className="h-4 w-4 text-white/[0.3] mt-0.5" />
                   <div>
-                    <p className="text-xs text-slate-500">Booking Period</p>
-                    <p className="text-sm font-semibold text-slate-900">
+                    <p className="text-xs text-[#A1A1AA]">Booking Period</p>
+                    <p className="text-sm font-semibold text-[#FAFAFA]">
                       {format(new Date(booking.startDate), 'PPP')} &mdash;{' '}
                       {format(new Date(booking.endDate), 'PPP')}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-start gap-2.5">
-                  <Clock className="h-4 w-4 text-slate-400 mt-0.5" />
+                  <Clock className="h-4 w-4 text-white/[0.3] mt-0.5" />
                   <div>
-                    <p className="text-xs text-slate-500">Booking Duration Type</p>
-                    <Badge variant="outline" className="text-xs bg-slate-50 mt-0.5">
+                    <p className="text-xs text-[#A1A1AA]">Booking Duration Type</p>
+                    <Badge variant="outline" className="text-xs bg-[#18181B] border-white/[0.08] mt-0.5 text-[#FAFAFA]">
                       {booking.bookingType}
                     </Badge>
                   </div>
@@ -210,16 +211,16 @@ function AdminBookingDetailContent({
           </div>
 
           {/* Timestamps */}
-          <div className="border-t border-slate-100 pt-4 grid grid-cols-2 gap-4 text-xs text-slate-500 font-mono">
+          <div className="border-t border-white/[0.08] pt-4 grid grid-cols-2 gap-4 text-xs text-[#A1A1AA]/70 font-mono">
             <div>Requested On: {format(new Date(booking.createdAt), 'yyyy-MM-dd HH:mm:ss')}</div>
             <div className="text-right">Last Updated: {format(new Date(booking.updatedAt), 'yyyy-MM-dd HH:mm:ss')}</div>
           </div>
 
           {/* Failure reason if failed */}
           {booking.status === 'FAILED' && (
-            <div className="rounded-lg border border-rose-200 bg-rose-50/50 p-4 text-sm text-rose-900">
+            <div className="rounded-lg border border-rose-500/20 bg-rose-500/5 p-4 text-sm text-rose-400">
               <span className="font-bold">Failure Reason:</span>{' '}
-              <code className="bg-white border border-rose-100 rounded px-1.5 py-0.5 text-xs text-rose-700 font-semibold font-mono">
+              <code className="bg-[#18181B] border border-white/[0.08] rounded px-1.5 py-0.5 text-xs text-rose-300 font-semibold font-mono">
                 {booking.failureReason || 'ADMIN_REJECTED'}
               </code>
             </div>
@@ -227,8 +228,8 @@ function AdminBookingDetailContent({
 
           {/* Admin action panel (only visible if status is PENDING) */}
           {isPending && (
-            <div className="border-t border-slate-200 pt-6 space-y-4">
-              <h3 className="font-bold text-slate-900 text-md">Process Booking Request</h3>
+            <div className="border-t border-white/[0.08] pt-6 space-y-4">
+              <h3 className="font-bold text-[#FAFAFA] text-md">Process Booking Request</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="review-reason">Reason (for email logs)</Label>
@@ -238,7 +239,7 @@ function AdminBookingDetailContent({
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
                     disabled={isPendingOrMutationLoading}
-                    className="border-slate-200 font-medium"
+                    className="bg-[#18181B] border-white/[0.08] text-[#FAFAFA] focus:border-[#7C3AED]"
                   />
                 </div>
                 <div className="space-y-2">
@@ -249,7 +250,7 @@ function AdminBookingDetailContent({
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                     disabled={isPendingOrMutationLoading}
-                    className="border-slate-200 font-medium"
+                    className="bg-[#18181B] border-white/[0.08] text-[#FAFAFA] focus:border-[#7C3AED]"
                   />
                 </div>
               </div>
@@ -257,14 +258,14 @@ function AdminBookingDetailContent({
                 <Button
                   onClick={handleApprove}
                   disabled={isPendingOrMutationLoading}
-                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold flex items-center justify-center gap-1.5 h-11"
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold flex items-center justify-center gap-1.5 h-11"
                 >
                   <Check className="h-5 w-5" /> Approve Request
                 </Button>
                 <Button
                   onClick={handleReject}
                   disabled={isPendingOrMutationLoading}
-                  className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-semibold flex items-center justify-center gap-1.5 h-11"
+                  className="flex-1 bg-rose-600 hover:bg-rose-500 text-white font-semibold flex items-center justify-center gap-1.5 h-11"
                 >
                   <X className="h-5 w-5" /> Reject Request
                 </Button>
@@ -283,7 +284,7 @@ export default function AdminBookingDetailPage({
   params: Promise<{ id: string }>;
 }) {
   return (
-    <Suspense fallback={<div className="py-12 text-center text-slate-500">Initializing review deck...</div>}>
+    <Suspense fallback={<div className="py-12 text-center text-[#A1A1AA]">Initializing review deck...</div>}>
       <AdminBookingDetailContent params={params} />
     </Suspense>
   );

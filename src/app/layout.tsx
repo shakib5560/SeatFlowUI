@@ -17,8 +17,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full">
-      <body className={`${inter.className} min-h-full flex flex-col`}>
+    <html lang="en" className="h-full dark">
+      <body className={`${inter.className} min-h-full flex flex-col bg-[#09090B] text-[#FAFAFA]`}>
         <QueryProvider>
           {children}
           <Toaster richColors position="top-right" />

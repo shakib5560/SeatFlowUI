@@ -19,7 +19,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { v4 as uuidv4 } from 'uuid';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { BookingStatus, BookingType, ApiError } from '@/types/api';
+import { BookingStatus, BookingType } from '@/types/api';
 
 // Validation Schema using Zod
 const bookingSchema = z.object({
@@ -56,16 +56,17 @@ function RoomDetailContent({
     message?: string;
   } | null>(null);
 
-  // Date selection states (synced to input fields)
-  const [inputStartDate, setInputStartDate] = useState(urlStartDate || '');
+  // Today's date in YYYY-MM-DD format — used as the minimum selectable date
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  // Date selection states (synced to input fields) — default start to today
+  const [inputStartDate, setInputStartDate] = useState(urlStartDate || todayStr);
   const [inputEndDate, setInputEndDate] = useState(urlEndDate || '');
 
   // Booking type selection (defaults to DAILY)
   const [bookingType, setBookingType] = useState<BookingType>('DAILY');
 
   // React Query: Room availability
-  // If dates are omitted in URL, this returns the full calendar booking list.
-  // If dates are provided, it verifies date availability.
   const hasDates = !!urlStartDate && !!urlEndDate;
   const {
     data: availabilityData,
@@ -90,7 +91,7 @@ function RoomDetailContent({
       customerName: '',
       customerEmail: '',
       bookingType: 'DAILY',
-      startDate: urlStartDate || '',
+      startDate: urlStartDate || new Date().toISOString().split('T')[0],
       endDate: urlEndDate || '',
     },
   });
@@ -101,25 +102,16 @@ function RoomDetailContent({
     if (urlEndDate) setValue('endDate', urlEndDate);
   }, [urlStartDate, urlEndDate, setValue]);
 
-  // Generate UUID when component mounts or resets
+  // Set initial client-side idempotency key
   useEffect(() => {
     setActiveRequestId(uuidv4());
   }, []);
 
   const handleDateCheck = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputStartDate || !inputEndDate) {
-      toast.error('Please select both start and end dates');
-      return;
+    if (inputStartDate && inputEndDate) {
+      router.push(`/rooms/${roomId}?startDate=${inputStartDate}&endDate=${inputEndDate}`);
     }
-
-    if (new Date(inputStartDate) > new Date(inputEndDate)) {
-      toast.error('Start date cannot be after end date');
-      return;
-    }
-
-    // Update URL to trigger React Query refetch
-    router.push(`/rooms/${roomId}?startDate=${inputStartDate}&endDate=${inputEndDate}`);
   };
 
   const handleClearDates = () => {
@@ -128,55 +120,40 @@ function RoomDetailContent({
     router.push(`/rooms/${roomId}`);
   };
 
-  // Main Submit Handler
+  // Submit Handler
   const onSubmit = async (values: BookingFormValues) => {
     setSubmissionError(null);
-    setSuccessBooking(null);
 
-    // If UUID was not set, generate it
-    let reqId = activeRequestId;
-    if (!reqId) {
-      reqId = uuidv4();
-      setActiveRequestId(reqId);
+    // Validate date sequence locally first
+    if (new Date(values.startDate) > new Date(values.endDate)) {
+      toast.error('Start date cannot fall after end date.');
+      return;
     }
 
     try {
-      const payload = {
-        ...values,
-        requestId: reqId,
+      const result = await createBookingMutation.mutateAsync({
         roomId,
-      };
+        customerName: values.customerName,
+        customerEmail: values.customerEmail,
+        bookingType: values.bookingType,
+        startDate: values.startDate,
+        endDate: values.endDate,
+        requestId: activeRequestId,
+      });
 
-      const result = await createBookingMutation.mutateAsync(payload);
+      // Clear form states & details — unwrap the StandardApiResponse envelope
+      setSuccessBooking({
+        reference: result.data.bookingReference,
+        status: result.data.status,
+        message: result.data.message,
+      });
+      toast.success('Booking request accepted by backend!');
 
-      if (result.success) {
-        setSuccessBooking({
-          reference: result.data.bookingReference,
-          status: result.data.status,
-          message: result.data.message, // Present if duplicate
-        });
-        toast.success(result.data.message || 'Booking request submitted successfully!');
-        // Reset request ID for future bookings
-        setActiveRequestId(uuidv4());
-      } else {
-        setSubmissionError(result.message || 'Booking failed');
-      }
+      // Generate a fresh idempotency key for any future booking
+      setActiveRequestId(uuidv4());
     } catch (err: any) {
-      // Parse backend standard error response envelope
-      const responseData = err.response?.data as ApiError | undefined;
-      if (responseData) {
-        // Map backend validation errors or general messages
-        if (responseData.errors && responseData.errors.length > 0) {
-          const validationMsg = responseData.errors
-            .map((e) => `${e.field}: ${e.message}`)
-            .join(', ');
-          setSubmissionError(`Validation Failed: ${validationMsg}`);
-        } else {
-          setSubmissionError(responseData.message || 'An unexpected error occurred.');
-        }
-      } else {
-        setSubmissionError(err.message || 'Request timed out or network error.');
-      }
+      const explanation = err?.message || 'Server did not accept request.';
+      setSubmissionError(explanation);
       toast.error('Booking request failed.');
     }
   };
@@ -185,17 +162,17 @@ function RoomDetailContent({
   const handleRetrySubmit = handleSubmit(onSubmit);
 
   if (isLoadingRooms) {
-    return <div className="py-12 text-center text-slate-500">Loading room information...</div>;
+    return <div className="py-12 text-center text-[#A1A1AA]">Loading room information...</div>;
   }
 
   if (!room) {
     return (
-      <div className="py-12 text-center text-slate-500">
-        <AlertCircle className="mx-auto h-12 w-12 text-rose-500" />
-        <h2 className="mt-4 text-xl font-bold text-slate-900">Room Not Found</h2>
-        <p className="mt-2 text-slate-500">The requested room does not exist in our systems.</p>
+      <div className="py-12 text-center text-[#A1A1AA]">
+        <AlertCircle className="mx-auto h-12 w-12 text-rose-400" />
+        <h2 className="mt-4 text-xl font-bold text-[#FAFAFA]">Room Not Found</h2>
+        <p className="mt-2 text-[#A1A1AA]">The requested room does not exist in our systems.</p>
         <Link href="/rooms" className="mt-6 inline-block">
-          <Button variant="outline" className="flex items-center gap-2">
+          <Button variant="outline" className="flex items-center gap-2 border-white/[0.08] text-[#FAFAFA] bg-[#111113] hover:bg-[#18181B]">
             <ArrowLeft className="h-4 w-4" /> Back to Rooms
           </Button>
         </Link>
@@ -203,29 +180,28 @@ function RoomDetailContent({
     );
   }
 
-  // Typecasting availability data based on state
   const isCheckResult = availabilityData && 'available' in availabilityData;
   const isCalendarResult = availabilityData && 'bookedRanges' in availabilityData;
 
   return (
-    <div className="space-y-8 py-4">
+    <div className="space-y-8 py-6 text-[#FAFAFA]">
       {/* Back button */}
       <div>
-        <Link href="/rooms" className="inline-flex items-center text-sm font-semibold text-indigo-600 hover:text-indigo-500 gap-1">
+        <Link href="/rooms" className="inline-flex items-center text-sm font-semibold text-[#7C3AED] hover:text-[#8B5CF6] gap-1 transition-colors">
           <ArrowLeft className="h-4 w-4" /> Back to Conference Rooms
         </Link>
       </div>
 
       {/* Title block */}
-      <div className="border-b border-slate-200 pb-5">
+      <div className="border-b border-white/[0.08] pb-5">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">{room.name}</h1>
-            <p className="mt-2 text-sm text-slate-600">
+            <h1 className="text-3xl font-extrabold tracking-tight text-[#FAFAFA]">{room.name}</h1>
+            <p className="mt-2 text-sm text-[#A1A1AA]">
               {room.description || 'Standard meeting room equipped for professional scheduling.'}
             </p>
           </div>
-          <Badge variant="outline" className="self-start sm:self-center border-slate-300 py-1.5 px-3 bg-slate-50">
+          <Badge variant="outline" className="self-start sm:self-center border-white/[0.08] py-1.5 px-3 bg-[#18181B] text-[#FAFAFA]">
             Room UUID: {room.id}
           </Badge>
         </div>
@@ -234,12 +210,12 @@ function RoomDetailContent({
       {/* Date Checker Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-1 space-y-6">
-          <Card className="border-slate-200">
+          <Card className="border-white/[0.08] bg-[#111113] text-[#FAFAFA] shadow-md">
             <CardHeader>
-              <CardTitle className="text-lg font-bold flex items-center gap-2">
-                <CalendarRange className="h-5 w-5 text-indigo-600" /> Check Date Availability
+              <CardTitle className="text-lg font-bold flex items-center gap-2 text-[#FAFAFA]">
+                <CalendarRange className="h-5 w-5 text-[#7C3AED]" /> Check Date Availability
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-[#A1A1AA]">
                 Check if the room is available before booking. All calculations are performed by the backend.
               </CardDescription>
             </CardHeader>
@@ -251,9 +227,10 @@ function RoomDetailContent({
                     id="check-start"
                     type="date"
                     value={inputStartDate}
+                    min={todayStr}
                     onChange={(e) => setInputStartDate(e.target.value)}
                     required
-                    className="border-slate-200"
+                    className="bg-[#18181B] border-white/[0.08] text-[#FAFAFA] focus:border-[#7C3AED]"
                   />
                 </div>
                 <div className="space-y-2">
@@ -262,17 +239,18 @@ function RoomDetailContent({
                     id="check-end"
                     type="date"
                     value={inputEndDate}
+                    min={inputStartDate || todayStr}
                     onChange={(e) => setInputEndDate(e.target.value)}
                     required
-                    className="border-slate-200"
+                    className="bg-[#18181B] border-white/[0.08] text-[#FAFAFA] focus:border-[#7C3AED]"
                   />
                 </div>
                 <div className="flex gap-2">
-                  <Button type="submit" className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold">
+                  <Button type="submit" className="flex-1 bg-[#7C3AED] hover:bg-[#8B5CF6] text-white font-semibold">
                     Verify Dates
                   </Button>
                   {hasDates && (
-                    <Button type="button" onClick={handleClearDates} variant="outline" className="border-slate-200">
+                    <Button type="button" onClick={handleClearDates} variant="outline" className="border-white/[0.08] bg-[#18181B] text-[#FAFAFA]">
                       Clear
                     </Button>
                   )}
@@ -282,17 +260,17 @@ function RoomDetailContent({
           </Card>
 
           {/* Calendar/Availability Panel */}
-          <Card className="border-slate-200">
+          <Card className="border-white/[0.08] bg-[#111113] text-[#FAFAFA] shadow-md">
             <CardHeader className="pb-3">
               <CardTitle className="text-md font-bold">Room Schedule & Status</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               {isLoadingAvailability ? (
-                <div className="py-6 text-center text-slate-500 text-sm flex items-center justify-center gap-2">
-                  <RefreshCw className="h-4 w-4 animate-spin text-indigo-600" /> Querying availability...
+                <div className="py-6 text-center text-[#A1A1AA] text-sm flex items-center justify-center gap-2">
+                  <RefreshCw className="h-4 w-4 animate-spin text-[#7C3AED]" /> Querying availability...
                 </div>
               ) : isErrorAvailability ? (
-                <div className="text-sm text-rose-600 bg-rose-50 p-3 rounded-lg flex items-start gap-2">
+                <div className="text-sm text-rose-400 bg-rose-500/5 border border-rose-500/20 p-3 rounded-lg flex items-start gap-2">
                   <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
                   <div>
                     <span className="font-semibold">Query failed:</span>{' '}
@@ -305,14 +283,14 @@ function RoomDetailContent({
                   <div
                     className={`p-4 rounded-lg flex items-start gap-3 border ${
                       availabilityData.available
-                        ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-                        : 'bg-rose-50 border-rose-200 text-rose-900'
+                        ? 'bg-emerald-500/10 border-emerald-500/20 text-[#22C55E]'
+                        : 'bg-rose-500/10 border-rose-500/20 text-rose-400'
                     }`}
                   >
                     {availabilityData.available ? (
-                      <CheckCircle className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+                      <CheckCircle className="h-5 w-5 text-[#22C55E] shrink-0 mt-0.5" />
                     ) : (
-                      <AlertCircle className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
+                      <AlertCircle className="h-5 w-5 text-rose-400 shrink-0 mt-0.5" />
                     )}
                     <div className="text-sm space-y-1">
                       <p className="font-bold">
@@ -320,7 +298,7 @@ function RoomDetailContent({
                       </p>
                       <p className="text-xs opacity-90">{availabilityData.message}</p>
                       {!availabilityData.available && availabilityData.nextAvailableDate && (
-                        <p className="text-xs mt-2 bg-rose-100/50 p-2 rounded text-rose-950 font-medium">
+                        <p className="text-xs mt-2 bg-rose-500/20 border border-rose-500/20 p-2 rounded text-rose-400 font-medium">
                           Next available date: <Clock className="inline h-3 w-3 mr-0.5" />
                           {format(new Date(availabilityData.nextAvailableDate), 'PPP')}
                         </p>
@@ -330,19 +308,19 @@ function RoomDetailContent({
 
                   {availabilityData.conflictingBookings.length > 0 && (
                     <div className="space-y-2">
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-[#A1A1AA]">
                         Conflicting Bookings:
                       </h4>
                       <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
                         {availabilityData.conflictingBookings.map((c, i) => (
-                          <div key={i} className="text-xs border rounded p-2.5 bg-slate-50 border-slate-200">
-                            <div className="flex justify-between font-semibold text-slate-900">
+                          <div key={i} className="text-xs border rounded p-2.5 bg-[#18181B] border-white/[0.08]">
+                            <div className="flex justify-between font-semibold text-[#FAFAFA]">
                               <span>Ref: {c.bookingReference}</span>
-                              <Badge className="text-[9px] px-1 py-0.5 bg-orange-100 text-orange-800 hover:bg-orange-100">
+                              <Badge className="text-[9px] px-1 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/20">
                                 {c.status}
                               </Badge>
                             </div>
-                            <div className="text-slate-500 mt-1">
+                            <div className="text-[#A1A1AA] mt-1">
                               {format(new Date(c.startDate), 'MMM d')} &mdash;{' '}
                               {format(new Date(c.endDate), 'MMM d, yyyy')}
                             </div>
@@ -355,29 +333,29 @@ function RoomDetailContent({
               ) : isCalendarResult ? (
                 // CALENDAR/BOOKED RANGES LIST VIEW
                 <div className="space-y-3">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-[#A1A1AA]">
                     Active Booking Calendar:
                   </h4>
                   {availabilityData.bookedRanges.length === 0 ? (
-                    <p className="text-xs text-slate-500 italic">No bookings scheduled for this room.</p>
+                    <p className="text-xs text-[#A1A1AA] italic">No bookings scheduled for this room.</p>
                   ) : (
                     <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
                       {availabilityData.bookedRanges.map((range, i) => (
-                        <div key={i} className="text-xs border rounded p-2.5 bg-slate-50 border-slate-200">
-                          <div className="flex justify-between font-semibold text-slate-950">
+                        <div key={i} className="text-xs border rounded p-2.5 bg-[#18181B] border-white/[0.08]">
+                          <div className="flex justify-between font-semibold text-[#FAFAFA]">
                             <span>Ref: {range.bookingReference}</span>
                             <Badge
                               variant="secondary"
-                              className={`text-[9px] px-1 py-0.5 ${
+                              className={`text-[9px] px-1 py-0.5 border ${
                                 range.status === 'CONFIRMED'
-                                  ? 'bg-emerald-50 text-emerald-700'
-                                  : 'bg-amber-50 text-amber-700'
+                                  ? 'bg-emerald-500/10 text-[#22C55E] border-emerald-500/20'
+                                  : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
                               }`}
                             >
                               {range.status}
                             </Badge>
                           </div>
-                          <div className="text-slate-500 mt-1">
+                          <div className="text-[#A1A1AA] mt-1">
                             {format(new Date(range.startDate), 'MMM d')} &mdash;{' '}
                             {format(new Date(range.endDate), 'MMM d, yyyy')}
                           </div>
@@ -387,7 +365,7 @@ function RoomDetailContent({
                   )}
                 </div>
               ) : (
-                <p className="text-xs text-slate-500">Enter dates above to fetch detailed schedule.</p>
+                <p className="text-xs text-[#A1A1AA]">Enter dates above to fetch detailed schedule.</p>
               )}
             </CardContent>
           </Card>
@@ -395,38 +373,38 @@ function RoomDetailContent({
 
         {/* Booking Request Form */}
         <div className="lg:col-span-2 space-y-6">
-          <Card className="border-slate-200">
-            <CardHeader className="border-b border-slate-100">
-              <CardTitle className="text-lg font-bold flex items-center gap-2">
+          <Card className="border-white/[0.08] bg-[#111113] text-[#FAFAFA] shadow-md">
+            <CardHeader className="border-b border-white/[0.08]">
+              <CardTitle className="text-lg font-bold flex items-center gap-2 text-[#FAFAFA]">
                 Create Room Booking Request
               </CardTitle>
-              <CardDescription>
-                Submit a booking request. The request is processed asynchronously by the NestJS queue worker and requires admin review.
+              <CardDescription className="text-[#A1A1AA]">
+                Fill in your details and select dates. Your request will be reviewed by our team.
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-6">
               {successBooking ? (
                 // SUCCESS STATE
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-6 text-slate-900 space-y-4">
+                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-6 text-[#FAFAFA] space-y-4">
                   <div className="flex items-center gap-3">
-                    <CheckCircle className="h-7 w-7 text-emerald-600" />
+                    <CheckCircle className="h-7 w-7 text-[#22C55E]" />
                     <div>
-                      <h3 className="font-bold text-lg text-emerald-950">Booking Request Accepted</h3>
-                      <p className="text-sm text-emerald-700">HTTP 202 Accepted</p>
+                      <h3 className="font-bold text-lg text-[#FAFAFA]">Booking Request Accepted</h3>
+                      <p className="text-sm text-[#22C55E]">HTTP 202 Accepted</p>
                     </div>
                   </div>
-                  <div className="border-t border-emerald-100 pt-4 space-y-2 text-sm text-emerald-900">
+                  <div className="border-t border-white/[0.08] pt-4 space-y-2 text-sm text-[#FAFAFA]">
                     {successBooking.message && (
-                      <p className="bg-emerald-100/50 p-2.5 rounded font-medium text-emerald-950">
+                      <p className="bg-emerald-500/10 border border-emerald-500/20 p-2.5 rounded font-medium text-[#22C55E]">
                         {successBooking.message}
                       </p>
                     )}
                     <div className="grid grid-cols-2 gap-2 mt-2">
-                      <span className="text-emerald-700">Booking Reference:</span>
-                      <span className="font-mono font-bold text-slate-900">{successBooking.reference}</span>
-                      <span className="text-emerald-700">Initial Status:</span>
+                      <span className="text-[#A1A1AA]">Booking Reference:</span>
+                      <span className="font-mono font-bold text-[#FAFAFA]">{successBooking.reference}</span>
+                      <span className="text-[#A1A1AA]">Initial Status:</span>
                       <span className="font-semibold">
-                        <Badge className="bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-100">
+                        <Badge className="bg-amber-500/10 text-amber-400 border border-amber-500/20">
                           {successBooking.status}
                         </Badge>
                       </span>
@@ -438,12 +416,12 @@ function RoomDetailContent({
                         setSuccessBooking(null);
                         setSubmissionError(null);
                       }}
-                      className="bg-slate-950 hover:bg-slate-800 text-white"
+                      className="bg-[#7C3AED] hover:bg-[#8B5CF6] text-white"
                     >
                       Book Another Period
                     </Button>
                     <Link href="/bookings">
-                      <Button variant="outline" className="border-slate-200">
+                      <Button variant="outline" className="border-white/[0.08] bg-[#18181B] text-[#FAFAFA]">
                         Go to Booking Directory
                       </Button>
                     </Link>
@@ -454,15 +432,15 @@ function RoomDetailContent({
                 <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
                   {/* Submission Error Banner */}
                   {submissionError && (
-                    <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-950 space-y-3">
+                    <div className="rounded-lg border border-rose-500/20 bg-rose-500/5 p-4 text-sm text-rose-400 space-y-3">
                       <div className="flex items-start gap-2">
-                        <AlertCircle className="h-5 w-5 text-rose-500 shrink-0 mt-0.5" />
+                        <AlertCircle className="h-5 w-5 text-rose-400 shrink-0 mt-0.5" />
                         <div>
                           <p className="font-bold">Submission Failed</p>
-                          <p className="text-xs text-rose-600 mt-1">{submissionError}</p>
+                          <p className="text-xs text-rose-500 mt-1">{submissionError}</p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 border-t border-rose-200/50 pt-2.5 text-xs text-slate-500 justify-between">
+                      <div className="flex items-center gap-2 border-t border-white/[0.08] pt-2.5 text-xs text-[#A1A1AA] justify-between">
                         <span>Idempotency request ID preserved for safety.</span>
                         <Button
                           type="button"
@@ -478,11 +456,11 @@ function RoomDetailContent({
                   )}
 
                   {/* Idempotency Key Notice */}
-                  <div className="bg-slate-50 rounded-lg p-3 border border-slate-200 text-xs text-slate-500 flex items-center justify-between gap-4">
+                  <div className="bg-[#18181B] rounded-lg p-3 border border-white/[0.08] text-xs text-[#A1A1AA] flex items-center justify-between gap-4">
                     <span>
-                      Idempotency key: <code className="font-mono text-slate-900">{activeRequestId || 'generating...'}</code>
+                      Idempotency key: <code className="font-mono text-[#FAFAFA]">{activeRequestId || 'generating...'}</code>
                     </span>
-                    <Badge variant="outline" className="shrink-0 bg-white">
+                    <Badge variant="outline" className="shrink-0 bg-[#111113] border-white/[0.08] text-[#FAFAFA]">
                       Idempotent
                     </Badge>
                   </div>
@@ -491,13 +469,13 @@ function RoomDetailContent({
                     {/* Customer Name */}
                     <div className="space-y-2">
                       <Label htmlFor="customerName" className="flex items-center gap-1">
-                        <User className="h-3.5 w-3.5 text-slate-400" /> Customer Name
+                        <User className="h-3.5 w-3.5 text-white/[0.3]" /> Customer Name
                       </Label>
                       <Input
                         id="customerName"
                         {...register('customerName')}
                         placeholder="John Doe"
-                        className="border-slate-200"
+                        className="bg-[#18181B] border-white/[0.08] text-[#FAFAFA] focus:border-[#7C3AED]"
                       />
                       {errors.customerName && (
                         <p className="text-xs text-rose-500 font-semibold">{errors.customerName.message}</p>
@@ -507,14 +485,14 @@ function RoomDetailContent({
                     {/* Customer Email */}
                     <div className="space-y-2">
                       <Label htmlFor="customerEmail" className="flex items-center gap-1">
-                        <Mail className="h-3.5 w-3.5 text-slate-400" /> Customer Email
+                        <Mail className="h-3.5 w-3.5 text-white/[0.3]" /> Customer Email
                       </Label>
                       <Input
                         id="customerEmail"
                         type="email"
                         {...register('customerEmail')}
                         placeholder="john@example.com"
-                        className="border-slate-200"
+                        className="bg-[#18181B] border-white/[0.08] text-[#FAFAFA] focus:border-[#7C3AED]"
                       />
                       {errors.customerEmail && (
                         <p className="text-xs text-rose-500 font-semibold">{errors.customerEmail.message}</p>
@@ -535,10 +513,10 @@ function RoomDetailContent({
                           }
                         }}
                       >
-                        <SelectTrigger className="border-slate-200">
+                        <SelectTrigger className="bg-[#18181B] border-white/[0.08] text-[#FAFAFA]">
                           <SelectValue placeholder="Select type" />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="bg-[#111113] border-white/[0.08] text-[#FAFAFA]">
                           <SelectItem value="DAILY">Daily Booking</SelectItem>
                           <SelectItem value="WEEKLY">Weekly Booking</SelectItem>
                           <SelectItem value="MONTHLY">Monthly Booking</SelectItem>
@@ -555,8 +533,9 @@ function RoomDetailContent({
                       <Input
                         id="startDate"
                         type="date"
+                        min={todayStr}
                         {...register('startDate')}
-                        className="border-slate-200"
+                        className="bg-[#18181B] border-white/[0.08] text-[#FAFAFA] focus:border-[#7C3AED]"
                       />
                       {errors.startDate && (
                         <p className="text-xs text-rose-500 font-semibold">{errors.startDate.message}</p>
@@ -569,8 +548,9 @@ function RoomDetailContent({
                       <Input
                         id="endDate"
                         type="date"
+                        min={todayStr}
                         {...register('endDate')}
-                        className="border-slate-200"
+                        className="bg-[#18181B] border-white/[0.08] text-[#FAFAFA] focus:border-[#7C3AED]"
                       />
                       {errors.endDate && (
                         <p className="text-xs text-rose-500 font-semibold">{errors.endDate.message}</p>
@@ -581,7 +561,7 @@ function RoomDetailContent({
                   <Button
                     type="submit"
                     disabled={createBookingMutation.isPending}
-                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold h-11"
+                    className="w-full bg-[#7C3AED] hover:bg-[#8B5CF6] text-white font-semibold h-11"
                   >
                     {createBookingMutation.isPending ? (
                       <span className="flex items-center gap-2">
@@ -611,7 +591,7 @@ export default function RoomDetailPage({
   searchParams: Promise<{ startDate?: string; endDate?: string }>;
 }) {
   return (
-    <Suspense fallback={<div className="py-12 text-center text-slate-500">Initializing room viewport...</div>}>
+    <Suspense fallback={<div className="py-12 text-center text-[#A1A1AA]">Initializing room viewport...</div>}>
       <RoomDetailContent params={params} searchParams={searchParams} />
     </Suspense>
   );
